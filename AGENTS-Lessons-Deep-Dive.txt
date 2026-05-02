@@ -1,0 +1,673 @@
+================================================================================
+            AGENTS.MD LESSONS: WEB APP DEVELOPMENT REALITY GUIDE
+================================================================================
+
+TABLE OF CONTENTS
+----------------
+1. Project Overview - Why It Matters
+2. Commands - Your Safety Net
+3. Do's - Deep Dive
+4. Don'ts - Deep Dive
+5. When Stuck - Breaking Tasks
+6. Testing - Catching Bugs Early
+7. Git - Version Control Best Practices
+8. Response Style - Communication That Works
+9. Summary Table
+
+================================================================================
+1. PROJECT OVERVIEW - WHY IT MATTERS
+================================================================================
+
+Instructions:
+  - Project: [Name] - [one sentence describing what it does]
+  - Target user: [developers, small businesses, lawyers, etc.]
+  - My skill level: [beginner / intermediate / expert]
+  - Stack: [Next.js, Supabase, Tailwind, etc. - or "see package files"]
+
+Why it matters in real web app:
+
+  - ONE SENTENCE = forces clarity. If you can't describe it in one sentence,
+    you don't understand the product yet.
+
+  - TARGET USER = every design, copy, feature decision flows from who uses it.
+    A lawyer app needs formality; a gaming app needs energy.
+
+  - SKILL LEVEL = affects how much hand-holding AI needs, complexity of
+    solutions it can handle.
+
+  - STACK = your entire dependency tree, deployment target, hosting requirements.
+
+Real scenario: Building an e-commerce app for small retail shops.
+
+Your "one sentence" becomes the north star when you're deep in 50 features
+and lost in complexity. It answers: "Are we still building the right thing?"
+
+================================================================================
+2. COMMANDS - YOUR SAFETY NET
+================================================================================
+
+Instructions:
+  - Install: npm install
+  - Dev: npm run dev
+  - Build: npm run build
+  - Test: npm test
+  - Lint: npm run lint
+
+Why it matters in real web app:
+
+  These are your SAFETY NET after every change:
+
+  - npm run dev = instant feedback loop. You break something, you see it in 2 seconds.
+
+  - npm run build = catches import errors, type errors, missing deps that dev
+    might miss.
+
+  - npm test = regression detection. Did your new feature break existing features?
+
+  - npm run lint = catches style bugs, unused vars, unreachable code before
+    they become real bugs.
+
+Real scenario:
+
+You change a user auth flow at line 200. You run npm run build. It fails because
+you deleted a function used at line 150. You catch it before it reaches staging.
+
+Technical chain:
+
+Code change -> Build -> TypeScript check -> Lint -> Test -> Deploy
+                ^
+           Catch errors HERE (10 sec)         vs   HERE (2am page)
+
+================================================================================
+3. DO'S - DEEP DIVE
+================================================================================
+
+-------------------------------------------------------------------------------
+3.1 Read existing code before modifying anything
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+You want to add "password reset" feature.
+You open auth.ts and see there's already:
+  - sendResetEmail() at line 45
+  - verifyResetToken() at line 78
+
+But both are commented out with "DEPRECATED - use OAuth instead"
+
+If you hadn't read first, you would have implemented a feature the user
+explicitly removed.
+
+What happens without this:
+  - Code duplication (2 functions doing same thing)
+  - Dead code accumulation
+  - Bugs from conflicting implementations
+  - 6 months later: nobody knows which one is real
+
+-------------------------------------------------------------------------------
+3.2 Match existing patterns, naming, and style
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+Existing pattern in your codebase:
+  - getUser() - fetches single user
+  - getUsers() - fetches array
+  - createUser(data) - creates user
+  - updateUser(id, data) - updates user
+
+You need: delete user function
+
+Pattern tells you:
+  - Naming: deleteUser(id) - NOT removeUser() or eraseUser()
+  - Signature: takes id, returns promise
+  - Error handling: throws UserNotFoundError if id invalid
+
+If you ignored pattern and wrote:
+  - eraseUser(userObject)
+
+You'd break:
+  - Code consistency (other devs can't predict API)
+  - TypeScript types (inconsistent interfaces)
+  - Documentation (no unified pattern to document)
+
+Technical impact:
+  - Frontend devs need consistent API to call your functions
+  - TypeScript inference works across the codebase
+  - Onboarding new devs is faster (one pattern, learn it once)
+
+-------------------------------------------------------------------------------
+3.3 Handle errors gracefully with no silent failures
+-------------------------------------------------------------------------------
+
+Silent Failure (BAD):
+
+  async function createOrder(cart) {
+    const response = await fetch('/api/orders', { method: 'POST', body: cart });
+    // User's money is charged, but order is NOT created
+    // Server error, but frontend shows "Order confirmed!"
+    return { success: true };
+  }
+
+Graceful Error (GOOD):
+
+  async function createOrder(cart) {
+    try {
+      const response = await fetch('/api/orders', { method: 'POST', body: cart });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new OrderError(error.message, response.status);
+      }
+
+      return await response.json();
+    } catch (error) {
+      if (error instanceof OrderError) {
+        // User sees: "Unable to create order. Please check card details."
+        // Support team gets: actual error logged with user ID, cart ID
+        await logErrorToSupport(error, { userId, cartId });
+        throw error;
+      }
+      throw new OrderError('Something went wrong. Please try again.');
+    }
+  }
+
+What happens without graceful error handling:
+  - Users lose money, order not created -> chargebacks, lawsuits
+  - No error data for debugging -> impossible to fix issues
+  - Silent failures in async code -> "works on my machine" syndrome
+
+-------------------------------------------------------------------------------
+3.4 Keep changes small and scoped to what was asked
+-------------------------------------------------------------------------------
+
+Large Change (BAD):
+
+  User: "Fix the login button color"
+  Developer changes:
+    - Login button color [CHECKED]
+    - Also rewrites entire auth system
+    - Also adds new database schema
+    - Also changes API endpoints
+    - Also updates frontend routing
+
+  After 3 days:
+    - 47 files changed
+    - 12 bugs reported
+    - Can't revert because change is too large
+    - User: "I just wanted the button to be blue!"
+
+Small Change (GOOD):
+
+  User: "Fix the login button color"
+  Developer:
+    1. Finds button component
+    2. Changes color property only
+    3. Runs npm run build -> passes
+    4. Tests login flow -> works
+    5. Commits: "Change login button to primary blue"
+
+  After 20 minutes:
+    - 1 file changed
+    - 0 new bugs
+    - Easy to revert if user doesn't like it
+    - User happy
+
+Technical reality:
+  - Web apps have 50-500 components
+  - Each component touches 5-20 other components
+  - Every line of code can introduce a bug
+  - Small changes = easy to debug, easy to revert, easy to review
+
+-------------------------------------------------------------------------------
+3.5 Run dev/build after changes to verify nothing broke
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+  You changed: userProfile.ts
+  You think: "It's a simple change, no need to build"
+
+  You push to production:
+    - TypeScript error in userProfile.ts breaks the build
+    - CI/CD pipeline fails
+    - Production deployment stops
+    - All users get "Service Unavailable"
+    - Your team lead gets paged at 2am
+
+  If you'd run npm run build:
+    - Catch error in 10 seconds
+    - Fix it locally
+    - Push clean code
+
+-------------------------------------------------------------------------------
+3.6 Ask clarifying questions before guessing
+-------------------------------------------------------------------------------
+
+Guessing (BAD):
+
+  User: "Make the search faster"
+  Developer assumes: "They want instant search"
+  Builds: Debounced search with 100ms delay
+
+  User: "This is too slow, I click and wait 100ms!"
+  Developer: "I added debouncing..."
+  User actually wanted: No loading spinner, current search takes 3s
+
+Asking (GOOD):
+
+  Developer: "Quick clarification - when you say 'faster', do you mean:
+    1. Instant results (no loading spinner visible)
+    2. Shorter wait time (current 3s -> 1s)
+    3. Background search (results appear as you type)
+    4. Cached results (common searches load instantly)"
+
+  User: "Option 2 - the spinner hangs too long, makes users nervous"
+  Developer: "Got it. I'll optimize the API call and remove the spinner."
+
+Time comparison:
+  - Guessing: Build 3 days -> User rejects -> Rebuild -> Total: 6 days
+  - Asking: 5 minutes -> Build 3 days -> User approves -> Total: 3 days
+
+================================================================================
+4. DON'TS - DEEP DIVE
+================================================================================
+
+-------------------------------------------------------------------------------
+4.1 No new dependencies without asking
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+  Developer adds: fancy-animation-library
+
+  What developer didn't check:
+    - Library has 47 transitive dependencies
+    - Library last updated 3 years ago
+    - Library has security vulnerability CVE-2024-XXXXX
+    - Library doesn't support SSR (breaks Next.js)
+    - Library adds 2MB to bundle size
+
+  After deployment:
+    - Security audit fails
+    - Bundle size too large for mobile
+    - SSR breaks
+
+Alternative approach:
+
+  Developer: "This library could help with animations. It's 15KB, supports SSR,
+              maintained actively. Can I add it?"
+  Team lead: "Yes, but check if framer-motion is already in the project"
+  Developer checks: Yes, framer-motion is already there
+  Developer: "Actually framer-motion can do this. No new dependency needed."
+
+Dependency cost:
+  - Each dependency = potential security vulnerability
+  - Each dependency = bundle size increase
+  - Each dependency = maintenance burden
+  - "No new deps without asking" = team awareness, dependency hygiene
+
+-------------------------------------------------------------------------------
+4.2 No deleting files without confirming
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+  Developer sees: old_auth_v1.js
+  Developer thinks: "This is dead code, let's delete it"
+  Deletes: old_auth_v1.js
+  Pushes to production
+
+  Next week:
+    - User reports: "Legacy users can't login"
+    - Investigation: old_auth_v1.js was still being called
+    - Recovery: Restore from git
+    - Cost: 3 days to recover, user trust damaged
+
+What should happen:
+
+  Developer: "old_auth_v1.js exists. Is this still in use?"
+  Senior dev: "Let me check..."
+  Senior dev: "Yes, user accounts created before 2024 still use it. Keep it."
+
+-------------------------------------------------------------------------------
+4.3 No hardcoding secrets
+-------------------------------------------------------------------------------
+
+Hardcoded (CATASTROPHIC):
+
+  // BAD - this file gets committed to git
+  const API_KEY = "sk_live_Abc123Def456Ghi789";
+
+Result:
+
+  1. Developer pushes to GitHub
+  2. Secret scanner detects API key
+  3. GitHub flags repository
+  4. Attacker finds key
+  5. $50,000 bill on your account overnight
+
+Correct approach:
+
+  // .env (NOT committed)
+  OPENAI_API_KEY=sk_live_Abc123Def456Ghi789
+
+  // code.js
+  const API_KEY = process.env.OPENAI_API_KEY;
+
+  // .gitignore
+  .env
+
+-------------------------------------------------------------------------------
+4.4 No rewriting working code
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+  Developer: "This code is messy, I can write it better"
+  Week 1: Rewriting
+  Week 2: Rewriting
+  Week 3: "It's working differently, users are complaining"
+  Week 4: "Some features work, some don't"
+  Week 5: "I can't figure out what this edge case does"
+  Week 6: "Should we just restore the old version?"
+
+  Cost: 6 weeks, user trust damaged, features lost
+
+The "working code" reality:
+
+Code that "looks messy" often has:
+  - Bug fixes from production incidents
+  - Edge cases discovered over months
+  - Performance optimizations from real load testing
+  - Compliance requirements from legal team
+
+-------------------------------------------------------------------------------
+4.5 No pushing without permission
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+  Developer: "I'll just push this small fix"
+  Pushes to main branch
+  Production goes down
+
+  Users affected: 10,000
+  Revenue lost: $50,000/hour
+  CEO: "Who pushed this?"
+  Developer: "I just wanted to fix it quickly..."
+
+Correct workflow:
+
+  1. Create feature branch
+  2. Make changes
+  3. Open PR
+  4. Code review
+  5. Approval
+  6. Merge
+  7. CI/CD runs tests
+  8. Deploy to staging
+  9. QA verification
+  10. Deploy to production
+
+-------------------------------------------------------------------------------
+4.6 Stay scoped to the request
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+  User: "Add a logout button"
+  Scope (what was asked): Logout button on profile page
+
+  Out of scope (what was added):
+    - New authentication system
+    - Database schema changes
+    - API endpoint redesigns
+    - 47 new files
+
+  After 2 weeks:
+    - 23 bugs in logout button alone
+    - Other features broken
+    - Can't find what part of the code handles logout
+
+================================================================================
+5. WHEN STUCK - BREAKING TASKS
+================================================================================
+
+-------------------------------------------------------------------------------
+5.1 Breaking large tasks into steps
+-------------------------------------------------------------------------------
+
+One Big Task (BAD):
+
+  Task: "Build user authentication system"
+  Estimation: 2 weeks
+  Day 1-3: "Getting started, still planning"
+  Day 4: "This is bigger than I thought"
+  Day 7: "Should I start over?"
+  Day 10: "Nothing to show, user is frustrated"
+  Day 14: "Done, but has 20 bugs"
+
+Broken into Steps (GOOD):
+
+  Task: "Build user authentication system"
+
+  Step 1: "User can enter email and password" - 1 day [CHECKED]
+  Step 2: "User gets error for invalid password" - 1 day [CHECKED]
+  Step 3: "User can reset forgotten password" - 1 day [CHECKED]
+  Step 4: "User can log out" - 1 day [CHECKED]
+  Step 5: "User stays logged in across sessions" - 1 day [CHECKED]
+  ...
+
+  After each step:
+    - User sees progress
+    - User can test and give feedback
+    - Bugs caught early
+    - Scope clarified organically
+
+Why this matters:
+  - Web apps have 50-500 features
+  - Each feature has 5-20 sub-features
+  - Breaking into steps makes the invisible visible
+  - Feedback loop prevents building the wrong thing
+
+-------------------------------------------------------------------------------
+5.2 Stop after 2 failed attempts
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+  Attempt 1: Try to fix database connection timeout - Fails
+  Attempt 2: Try different connection string - Fails
+  Attempt 3: "Let me try one more thing..."
+  Attempt 4: "Maybe this library will work..."
+  Attempt 5: "Let me check one more forum post..."
+
+  After 3 hours:
+    - 5 attempted solutions
+    - No solution
+    - Original problem not documented
+    - No evidence for senior dev to debug
+
+What should happen:
+
+  Attempt 1: Try to fix database connection timeout - Fails
+  Attempt 2: Try different connection string - Fails
+
+  STOP. Document:
+    - What I tried (attempt 1, attempt 2)
+    - What the error was (specific error message)
+    - What the system is doing (connection attempts, timeouts)
+    - What I think the cause might be
+
+  Escalate to team:
+    "Database connection fails after 30 seconds. Two different connection strings
+     tested. Error: ECONNREFUSED on port 5432. This started after the
+     last deployment."
+
+================================================================================
+6. TESTING - CATCHING BUGS EARLY
+================================================================================
+
+-------------------------------------------------------------------------------
+6.1 Run tests after every change
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+  You change: calculateShipping(cart, location)
+
+  You think: "Simple function, don't need to run tests"
+
+  You push. Production:
+    - Shipping calculated wrong for Alaska
+    - Users in Alaska getting free shipping
+    - Revenue lost: $30,000
+
+  Test would have caught:
+    calculateShipping({items: [{}], location: 'Alaska'})
+    Expected: 25.00
+    Actual: 0.00
+    Test fails -> caught before production
+
+What a test would look like:
+
+  test('calculates Alaska shipping correctly', () => {
+    const result = calculateShipping(
+      { items: [{ price: 10 }] },
+      'Alaska'
+    );
+    expect(result).toBe(25.00);
+  });
+
+-------------------------------------------------------------------------------
+6.2 Never skip tests to make things pass
+-------------------------------------------------------------------------------
+
+Real scenario:
+
+  Developer: "Tests are failing..."
+  Developer: "Let me skip this test temporarily"
+  Commented out: test('user must verify email')
+
+  Push to production:
+    - Unverified users can make purchases
+    - Fraudulent accounts created
+    - Payment processor flags account
+    - Business loses payment processor entirely
+
+================================================================================
+7. GIT - VERSION CONTROL BEST PRACTICES
+================================================================================
+
+-------------------------------------------------------------------------------
+7.1 Small, focused commits
+-------------------------------------------------------------------------------
+
+One Big Commit (BAD):
+
+  git commit -m "Fixed various things"
+    - Changed login logic
+    - Changed database schema
+    - Changed frontend routing
+    - Fixed 3 bugs
+    - Added 2 features
+
+  When you need to revert "database schema change":
+    - Can't revert just that part
+    - Must revert everything
+    - Lose the login fix and bug fixes
+
+Small Commits (GOOD):
+
+  git commit -m "Add email field to users table"
+  git commit -m "Update login to require email"
+  git commit -m "Fix email validation regex"
+  git commit -m "Add email verification on signup"
+
+  Each commit can be:
+    - Reviewed in 2 minutes
+    - Reverted independently
+    - Understood in isolation
+    - Documented properly
+
+-------------------------------------------------------------------------------
+7.2 Never force push
+-------------------------------------------------------------------------------
+
+Force push risks:
+  - Overwrites team members' work
+  - Breaks CI/CD pipelines
+  - Causes permanent data loss
+  - Breaks shared branches
+
+================================================================================
+8. RESPONSE STYLE - COMMUNICATION THAT WORKS
+================================================================================
+
+-------------------------------------------------------------------------------
+8.1 Plain English, short sentences
+-------------------------------------------------------------------------------
+
+Complex (BAD):
+
+  "Subsequent to the initialization of the authentication modularization,
+   it has come to our attention that there exists a potential race condition
+   in the asynchronous processing pipeline that may result in the generation
+   of duplicate session tokens under high load conditions."
+
+Simple (GOOD):
+
+  "Login breaks when many users sign up at the same time.
+   Sometimes users get two login sessions instead of one.
+   I've found the bug in the auth code.
+   Need to add session deduplication logic."
+
+Why this matters:
+  - Miscommunication in tech docs = bugs in production
+  - "Plain English" reduces ambiguity
+  - Short sentences = easy to translate to action items
+  - Clear communication = faster debugging
+
+================================================================================
+9. SUMMARY TABLE
+================================================================================
+
+| Instruction                    | Real Problem It Solves                    |
+|--------------------------------|----------------------------------------|
+| Read first                     | Don't duplicate existing work           |
+| Match patterns                  | Consistent codebase, faster onboarding|
+| Handle errors gracefully       | Users don't lose money/data silently   |
+| Keep changes small             | Lower bug risk, faster reviews         |
+| Run dev/build                  | Catch errors before production          |
+| Ask questions                  | Don't build the wrong thing              |
+| No new deps                    | Security, bundle size, maintainability |
+| No deleting files              | Don't break hidden dependencies         |
+| No secrets                     | Don't get hacked                       |
+| Don't rewrite                  | Legacy knowledge in "messy" code      |
+| No push without ask           | Production stability                   |
+| Stay scoped                    | Don't turn 1-day into 2-week disaster  |
+| Break tasks                    | Make progress visible                 |
+| Stop after 2 attempts         | Don't spin wheels, escalate efficiently|
+| Run tests                      | Catch bugs before users see them      |
+| Small commits                  | Easy to revert, easy to review         |
+| Plain English                  | Fast, accurate communication           |
+
+================================================================================
+FINAL NOTE
+================================================================================
+
+These instructions aren't arbitrary rules - they're hard-won lessons from
+building software that works in production.
+
+Every rule exists because someone broke it and it cost:
+  - Time (hours to days to weeks)
+  - Money ($100s to $50,000s)
+  - Trust (users leaving, reputation damaged)
+  - Sleep (2am pages, weekend emergencies)
+
+Following these rules = shipping stable code, happy users, sane developers.
+
+================================================================================
+                          END OF DOCUMENT
+================================================================================
