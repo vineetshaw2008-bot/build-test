@@ -7,13 +7,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 30,
-      "includeFiles": [
-        "server/index.js",
-        "server/db/**",
-        "server/middleware/**",
-        "server/routes/**",
-        "server/services/**"
-      ]
+      "includeFiles": "server/**"
     }
   },
   "rewrites": [
